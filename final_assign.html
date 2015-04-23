@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+<meta name="author" content="GianLuca Colussi" />
+
+<meta name="date" content="2015-04-23" />
+
+<title>Machine Learning Assignment</title>
+
+<script src="final_assign_files/jquery-1.11.0/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="final_assign_files/bootstrap-3.3.1/css/bootstrap.min.css" rel="stylesheet" />
+<script src="final_assign_files/bootstrap-3.3.1/js/bootstrap.min.js"></script>
+<script src="final_assign_files/bootstrap-3.3.1/shim/html5shiv.min.js"></script>
+<script src="final_assign_files/bootstrap-3.3.1/shim/respond.min.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<link rel="stylesheet"
+      href="final_assign_files/highlight/default.css"
+      type="text/css" />
+<script src="final_assign_files/highlight/highlight.js"></script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img { 
+  max-width:100%; 
+  height: auto; 
+}
+</style>
+<div class="container-fluid main-container">
+
+
+<div id="header">
+<h1 class="title">Machine Learning Assignment</h1>
+<h4 class="author"><em>GianLuca Colussi</em></h4>
+<h4 class="date"><em>04/23/2015</em></h4>
+</div>
+
+
+<p>Download databases from web (source “<a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>”)</p>
+<pre class="r"><code>setwd(&quot;~/Copy/PML_Assig&quot;)
+trainURL &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;
+testURL &lt;- &quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;
+if (!file.exists(&quot;training.csv&quot;)) {
+        download.file(trainURL,&quot;training.csv&quot;,method=&quot;curl&quot;)}
+if (!file.exists(&quot;testing.csv&quot;)) {
+        download.file(testURL,&quot;testing.csv&quot;,method=&quot;curl&quot;)}</code></pre>
+<p>Load databases in R</p>
+<pre class="r"><code>training &lt;- read.csv(&quot;training.csv&quot;,na.strings = c(&quot;NA&quot;,&quot;#DIV/0!&quot;))
+validation &lt;- read.csv(&quot;testing.csv&quot;,na.strings = c(&quot;NA&quot;,&quot;#DIV/0!&quot;))</code></pre>
+<div id="data-splitting" class="section level3">
+<h3>Data splitting</h3>
+<p>I create working databases for training and predictioning (train 75%, test 25%)</p>
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice
+## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>set.seed(2704)
+inTrain &lt;- createDataPartition(y=training$classe,p=0.75, list=FALSE)
+dbtrain &lt;- training[inTrain,]
+dbtest &lt;- training[-inTrain,]</code></pre>
+</div>
+<div id="preparation-of-traininig-dataset" class="section level3">
+<h3>Preparation of traininig dataset</h3>
+<p>In this section I’ve selected variables with raw data from accelerometers and Euler angles and I’ve calulated the mean of each variable within a same window. My aim is to preserve information but reducing the size of the training dataset because of hardware limitation</p>
+<pre class="r"><code>db1 &lt;- dbtrain[,grepl(&quot;^gyros_&quot;,colnames(dbtrain))]
+db2 &lt;- dbtrain[,grepl(&quot;^accel_&quot;,colnames(dbtrain))]
+db3 &lt;- dbtrain[,grepl(&quot;^magnet_&quot;,colnames(dbtrain))]
+db4 &lt;- dbtrain[,grepl(&quot;^total_accel&quot;,colnames(dbtrain))]
+db5 &lt;- dbtrain[,grepl(&quot;^roll_&quot;,colnames(dbtrain))]
+db6 &lt;- dbtrain[,grepl(&quot;^pitch_&quot;,colnames(dbtrain))]
+db7 &lt;- dbtrain[,grepl(&quot;^yaw_&quot;,colnames(dbtrain))]
+db &lt;- cbind(db1,db2,db3,db4,db5,db6,db7,
+            num_window=dbtrain$num_window,classe=dbtrain$classe)
+dbA &lt;- db[db$classe == &quot;A&quot;,]
+dbB &lt;- db[db$classe == &quot;B&quot;,]
+dbC &lt;- db[db$classe == &quot;C&quot;,]
+dbD &lt;- db[db$classe == &quot;D&quot;,]
+dbE &lt;- db[db$classe == &quot;E&quot;,]
+amean &lt;- cbind(aggregate(dbA[,-54],by=list(dbA$num_window),mean),classe=&quot;A&quot;)
+bmean &lt;- cbind(aggregate(dbB[,-54],by=list(dbB$num_window),mean),classe=&quot;B&quot;)
+cmean &lt;- cbind(aggregate(dbC[,-54],by=list(dbC$num_window),mean),classe=&quot;C&quot;)
+dmean &lt;- cbind(aggregate(dbD[,-54],by=list(dbD$num_window),mean),classe=&quot;D&quot;)
+emean &lt;- cbind(aggregate(dbE[,-54],by=list(dbE$num_window),mean),classe=&quot;E&quot;)
+dbmean &lt;- rbind(amean,bmean,cmean,dmean,emean)
+dbmean0 = dbmean[,-c(1,54)]</code></pre>
+</div>
+<div id="modelling" class="section level3">
+<h3>Modelling</h3>
+<p>Fit four models with my train data</p>
+<pre class="r"><code>#model 1: random forest, no preprocess, all predictors 
+modelFIT1 &lt;- train(classe ~ .,data=dbmean0, method=&quot;rf&quot;, prox=TRUE)</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>#model 2: generalized boosted regression, no preprocess, all predictors
+modelFIT2 &lt;- train(classe ~ .,data=dbmean0,method=&quot;gbm&quot;,verbose=FALSE)</code></pre>
+<pre><code>## Loading required package: gbm
+## Loading required package: survival
+## 
+## Attaching package: &#39;survival&#39;
+## 
+## The following object is masked from &#39;package:caret&#39;:
+## 
+##     cluster
+## 
+## Loading required package: splines
+## Loading required package: parallel
+## Loaded gbm 2.1.1
+## Loading required package: plyr</code></pre>
+<pre class="r"><code>#model 3: linear discriminant analysis, no preprocess, all predictors
+modelFIT3 &lt;- train(classe ~ .,data=dbmean0,method=&quot;lda&quot;)</code></pre>
+<pre><code>## Loading required package: MASS</code></pre>
+<pre class="r"><code>#model 4: classification trees, no preprocess, all predictors
+modelFIT4 &lt;- train(classe ~ .,data=dbmean0,method=&quot;rpart&quot;)</code></pre>
+<pre><code>## Loading required package: rpart</code></pre>
+<p>Comparing the four models with respective accuracy and Kappa index (both parameters that estimate the out of sample error from a bootstraping resamples)</p>
+<pre class="r"><code>results &lt;- resamples(list(RF=modelFIT1,GBM=modelFIT2,LDA=modelFIT3,RPART=modelFIT4))
+summary(results)</code></pre>
+<pre><code>## 
+## Call:
+## summary.resamples(object = results)
+## 
+## Models: RF, GBM, LDA, RPART 
+## Number of resamples: 25 
+## 
+## Accuracy 
+##         Min. 1st Qu. Median   Mean 3rd Qu.   Max. NA&#39;s
+## RF    0.8395  0.8609 0.8671 0.8695  0.8789 0.9049    0
+## GBM   0.8050  0.8481 0.8589 0.8562  0.8694 0.8987    0
+## LDA   0.6844  0.7238 0.7338 0.7372  0.7460 0.7895    0
+## RPART 0.4575  0.4968 0.5312 0.5274  0.5605 0.5793    0
+## 
+## Kappa 
+##         Min. 1st Qu. Median   Mean 3rd Qu.   Max. NA&#39;s
+## RF    0.7960  0.8229 0.8312 0.8342  0.8466 0.8798    0
+## GBM   0.7553  0.8054 0.8226 0.8178  0.8348 0.8718    0
+## LDA   0.5997  0.6509 0.6638 0.6672  0.6785 0.7328    0
+## RPART 0.3073  0.3810 0.4058 0.4046  0.4419 0.4615    0</code></pre>
+<pre class="r"><code>bwplot(results,main=&quot;Box plot of accuracy and Kappa by different model&quot;)</code></pre>
+<div class="figure">
+<img src="final_assign_files/figure-html/Figure_1-1.png" />
+</div>
+<pre class="r"><code>diffValues &lt;- diff(results) 
+summary(diffValues)</code></pre>
+<pre><code>## 
+## Call:
+## summary.diff.resamples(object = diffValues)
+## 
+## p-value adjustment: bonferroni 
+## Upper diagonal: estimates of the difference
+## Lower diagonal: p-value for H0: difference = 0
+## 
+## Accuracy 
+##       RF        GBM       LDA       RPART  
+## RF              0.01329   0.13235   0.34215
+## GBM   0.2293              0.11906   0.32885
+## LDA   4.622e-16 6.368e-15           0.20979
+## RPART &lt; 2.2e-16 &lt; 2.2e-16 &lt; 2.2e-16        
+## 
+## Kappa 
+##       RF        GBM       LDA       RPART  
+## RF              0.01638   0.16703   0.42958
+## GBM   0.2523              0.15065   0.41321
+## LDA   5.256e-16 3.921e-15           0.26255
+## RPART &lt; 2.2e-16 &lt; 2.2e-16 &lt; 2.2e-16</code></pre>
+<p>I select Random Forest (RF) model because of its higher Accuracy and Kappa with an <strong>expected out of samples error of 13%</strong></p>
+</div>
+<div id="prediction" class="section level3">
+<h3>Prediction</h3>
+<p>Predicting test data with the Random Forest model and related confusion matrix summary</p>
+<pre class="r"><code>prediction &lt;- predict(modelFIT1,dbtest)
+confusionMatrix(prediction,dbtest$classe)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1336   65   11   18    3
+##          B   25  791   45   13   22
+##          C    8   80  760   52   13
+##          D   18    9   24  704   12
+##          E    8    4   15   17  851
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9058          
+##                  95% CI : (0.8973, 0.9138)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.8807          
+##  Mcnemar&#39;s Test P-Value : 3.392e-08       
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9577   0.8335   0.8889   0.8756   0.9445
+## Specificity            0.9724   0.9735   0.9622   0.9846   0.9890
+## Pos Pred Value         0.9323   0.8828   0.8324   0.9179   0.9508
+## Neg Pred Value         0.9830   0.9606   0.9762   0.9758   0.9875
+## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+## Detection Rate         0.2724   0.1613   0.1550   0.1436   0.1735
+## Detection Prevalence   0.2922   0.1827   0.1862   0.1564   0.1825
+## Balanced Accuracy      0.9650   0.9035   0.9256   0.9301   0.9668</code></pre>
+</div>
+<div id="validation" class="section level3">
+<h3>Validation</h3>
+<pre class="r"><code>answers &lt;- predict(modelFIT1,validation)</code></pre>
+</div>
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+$(document).ready(function () {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+});
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

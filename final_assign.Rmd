@@ -1,0 +1,104 @@
+---
+title: "Machine Learning Assignment"
+author: "GianLuca Colussi"
+date: "04/23/2015"
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+    self_contained: false
+---
+
+Download databases from web (source "http://groupware.les.inf.puc-rio.br/har")
+```{r}
+setwd("~/Copy/PML_Assig")
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if (!file.exists("training.csv")) {
+        download.file(trainURL,"training.csv",method="curl")}
+if (!file.exists("testing.csv")) {
+        download.file(testURL,"testing.csv",method="curl")}
+```
+Load databases in R
+```{r}
+training <- read.csv("training.csv",na.strings = c("NA","#DIV/0!"))
+validation <- read.csv("testing.csv",na.strings = c("NA","#DIV/0!"))
+```
+
+###Data splitting
+
+I create working databases for training and predictioning (train 75%, test 25%)
+```{r}
+library(caret)
+set.seed(2704)
+inTrain <- createDataPartition(y=training$classe,p=0.75, list=FALSE)
+dbtrain <- training[inTrain,]
+dbtest <- training[-inTrain,]
+```
+
+###Preparation of traininig dataset
+
+In this section I've selected variables with raw data from accelerometers and Euler angles and I've calulated the mean of each variable within a same window. My aim is to preserve information but reducing the size of the training dataset because of hardware limitation
+
+```{r}
+db1 <- dbtrain[,grepl("^gyros_",colnames(dbtrain))]
+db2 <- dbtrain[,grepl("^accel_",colnames(dbtrain))]
+db3 <- dbtrain[,grepl("^magnet_",colnames(dbtrain))]
+db4 <- dbtrain[,grepl("^total_accel",colnames(dbtrain))]
+db5 <- dbtrain[,grepl("^roll_",colnames(dbtrain))]
+db6 <- dbtrain[,grepl("^pitch_",colnames(dbtrain))]
+db7 <- dbtrain[,grepl("^yaw_",colnames(dbtrain))]
+db <- cbind(db1,db2,db3,db4,db5,db6,db7,
+            num_window=dbtrain$num_window,classe=dbtrain$classe)
+dbA <- db[db$classe == "A",]
+dbB <- db[db$classe == "B",]
+dbC <- db[db$classe == "C",]
+dbD <- db[db$classe == "D",]
+dbE <- db[db$classe == "E",]
+amean <- cbind(aggregate(dbA[,-54],by=list(dbA$num_window),mean),classe="A")
+bmean <- cbind(aggregate(dbB[,-54],by=list(dbB$num_window),mean),classe="B")
+cmean <- cbind(aggregate(dbC[,-54],by=list(dbC$num_window),mean),classe="C")
+dmean <- cbind(aggregate(dbD[,-54],by=list(dbD$num_window),mean),classe="D")
+emean <- cbind(aggregate(dbE[,-54],by=list(dbE$num_window),mean),classe="E")
+dbmean <- rbind(amean,bmean,cmean,dmean,emean)
+dbmean0 = dbmean[,-c(1,54)]
+```
+
+###Modelling
+
+Fit four models with my train data
+```{r}
+#model 1: random forest, no preprocess, all predictors 
+modelFIT1 <- train(classe ~ .,data=dbmean0, method="rf", prox=TRUE)
+#model 2: generalized boosted regression, no preprocess, all predictors
+modelFIT2 <- train(classe ~ .,data=dbmean0,method="gbm",verbose=FALSE)
+#model 3: linear discriminant analysis, no preprocess, all predictors
+modelFIT3 <- train(classe ~ .,data=dbmean0,method="lda")
+#model 4: classification trees, no preprocess, all predictors
+modelFIT4 <- train(classe ~ .,data=dbmean0,method="rpart")
+```
+
+Comparing the four models with respective accuracy and Kappa index (both parameters that estimate the out of sample error from a bootstraping resamples) 
+
+```{r Figure_1}
+results <- resamples(list(RF=modelFIT1,GBM=modelFIT2,LDA=modelFIT3,RPART=modelFIT4))
+summary(results)
+bwplot(results,main="Box plot of accuracy and Kappa by different model")
+diffValues <- diff(results) 
+summary(diffValues)
+```
+I select Random Forest (RF) model because of its higher Accuracy and Kappa with an __expected out of samples error of 13%__ 
+
+###Prediction
+
+Predicting test data with the Random Forest model and related confusion matrix summary
+
+```{r}
+prediction <- predict(modelFIT1,dbtest)
+confusionMatrix(prediction,dbtest$classe)
+```
+
+###Validation
+```{r}
+answers <- predict(modelFIT1,validation)
+```
